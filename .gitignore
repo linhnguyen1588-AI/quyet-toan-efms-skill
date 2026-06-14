@@ -1,0 +1,43 @@
+# Logs & temporary files
+*.log
+*.tmp
+*.bak
+*.zip
+
+# HTML Dumps and Intercept Logs (large debugging files)
+*.html
+*.png
+*.jpg
+*.jpeg
+*.gif
+*intercept_logs.json
+api_dump.json
+api_debug.json
+buttons_dump.txt
+row_dump.html
+skill_table.html
+excel_preview.json
+download_link.json
+
+# Excel spreadsheets (dữ liệu nghiệp vụ)
+*.xlsx
+*.xls
+*.csv
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# OS specific
+desktop.ini
+.DS_Store
+Thumbs.db
+
+# IDE / Antigravity files
+.gemini/
+.idea/
+.vscode/
