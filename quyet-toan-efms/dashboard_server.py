@@ -240,6 +240,9 @@ def run_script():
         cmd_str = subprocess.list2cmdline(cmd) if isinstance(cmd, list) else cmd
         print(f"[INFO] Formatted command line: {cmd_str}")
         
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        
         process = subprocess.Popen(
             cmd_str,
             stdout=lf,
@@ -247,7 +250,8 @@ def run_script():
             cwd=SKILL_DIR,
             shell=True,
             text=True,
-            bufsize=1
+            bufsize=1,
+            env=env
         )
         
         active_tasks[task_id] = {

@@ -7,7 +7,7 @@ from openpyxl.styles import PatternFill
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 
-sys.stdout.reconfigure(encoding='utf-8')
+sys.stdout.reconfigure(encoding='utf-8', line_buffering=True)
 
 def resolve_excel_path(user_input):
     user_input = user_input.strip()
