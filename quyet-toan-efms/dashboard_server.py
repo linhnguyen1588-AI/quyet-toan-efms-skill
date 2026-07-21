@@ -397,19 +397,6 @@ def open_file():
             return jsonify({"success": False, "message": "Yêu cầu không hợp lệ!"}), 400
     except Exception as e:
         return jsonify({"success": False, "message": f"Không thể mở file/thư mục: {str(e)}"}), 500
-            return jsonify({"success": True, "message": "Đã mở thư mục kết quả."})
-        elif filename:
-            full_path = os.path.join(output_dir, filename)
-            if os.path.exists(full_path):
-                print(f"[INFO] Opening file: {full_path}")
-                os.startfile(full_path)
-                return jsonify({"success": True, "message": f"Đã mở file {filename}."})
-            else:
-                return jsonify({"success": False, "message": f"File {filename} không tồn tại!"}), 404
-        else:
-            return jsonify({"success": False, "message": "Yêu cầu không hợp lệ!"}), 400
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Không thể thực hiện mở file: {str(e)}"}), 500
 
 if __name__ == "__main__":
     print("\n" + "="*80)
