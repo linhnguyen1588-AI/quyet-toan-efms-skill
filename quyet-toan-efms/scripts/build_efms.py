@@ -370,15 +370,37 @@ def main():
     config = load_json(CONFIG_FILE)
     company_map = load_json(MAP_FILE)
     
-    output_dir = config.get("output_dir", "./")
+    base_output_dir = config.get("output_dir", "./")
     api_url = config.get("api_url")
     
     if not api_url:
         print("[ERROR] API URL not configured in config.json")
         sys.exit(1)
         
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Auto-resolve Monthly output directory (e.g. D:\workspace-ai\QUYET TOAN 2026\THANG 7\BUYING T7)
+    month_folder_name = f"THANG {args.month}"
+    buying_folder_name = f"BUYING T{args.month}"
+    
+    possible_dirs = [
+        os.path.join(base_output_dir, month_folder_name, buying_folder_name),
+        os.path.join(base_output_dir, month_folder_name),
+        base_output_dir
+    ]
+    
+    output_dir = None
+    for p in possible_dirs:
+        try:
+            os.makedirs(p, exist_ok=True)
+            output_dir = p
+            break
+        except Exception:
+            continue
+            
+    if not output_dir:
+        output_dir = os.path.join(os.path.expanduser("~"), "QUYET_TOAN_OUTPUT")
+        os.makedirs(output_dir, exist_ok=True)
+        
+    print(f"[INFO] Thư mục lưu file Excel đầu ra: {output_dir}")
 
     # Fuzzy match company name or use Smart Scan
     company_key = args.company
@@ -626,11 +648,9 @@ def main():
         output_filename = f"LogisticsImport_EFMS_Buying_{company_key}_{args.month:02d}_{args.year}{part_suffix}.xlsx"
         output_path = os.path.join(output_dir, output_filename)
         
-        try:
-            df_chunk.to_excel(output_path, index=False, engine='openpyxl')
-            
-            # Highlight charge codes and duplicate bills
-            wb = load_workbook(output_path)
+        def save_and_highlight(target_path):
+            df_chunk.to_excel(target_path, index=False, engine='openpyxl')
+            wb = load_workbook(target_path)
             ws = wb.active
             yellow_fill = PatternFill(start_color='FFFFFF00', end_color='FFFFFF00', fill_type='solid')
             cof_fill = PatternFill(start_color='DDEBF7', end_color='DDEBF7', fill_type='solid')
@@ -662,12 +682,30 @@ def main():
                 if duplicate_bills and hbl_val in duplicate_bills:
                     ws.cell(row=row, column=1).fill = yellow_fill
                     
-            wb.save(output_path)
-                
+            wb.save(target_path)
+
+        try:
+            save_and_highlight(output_path)
             print(f"[SUCCESS] Successfully generated EFMS Buying file: {output_path}")
             print(f"[INFO] File {i+1} rows: {len(df_chunk)}")
         except Exception as e:
-            print(f"[ERROR] Failed to save Excel file {output_path}: {e}")
+            # Fallback 1: Try saving with timestamp if file is open in Excel or locked
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            alt_filename = f"LogisticsImport_EFMS_Buying_{company_key}_{args.month:02d}_{args.year}{part_suffix}_{ts}.xlsx"
+            alt_path = os.path.join(output_dir, alt_filename)
+            try:
+                save_and_highlight(alt_path)
+                print(f"[SUCCESS] Saved with timestamp due to file lock: {alt_path}")
+            except Exception as e2:
+                # Fallback 2: Local user directory
+                local_dir = os.path.join(os.path.expanduser("~"), "QUYET_TOAN_OUTPUT")
+                os.makedirs(local_dir, exist_ok=True)
+                local_path = os.path.join(local_dir, output_filename)
+                try:
+                    save_and_highlight(local_path)
+                    print(f"[SUCCESS] Saved to user fallback directory: {local_path}")
+                except Exception as e3:
+                    print(f"[ERROR] Failed to save Excel file: {e3}")
             
     if duplicate_bills:
         print(f"[INFO] Highlighted {len(duplicate_bills)} duplicate bills in yellow.")
