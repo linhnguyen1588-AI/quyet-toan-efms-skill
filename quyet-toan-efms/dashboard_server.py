@@ -406,4 +406,4 @@ if __name__ == "__main__":
     print("      EFMS DECISION SETTLEMENT SYSTEM DASHBOARD SERVER IS RUNNING")
     print("      Địa chỉ truy cập: http://localhost:5000")
     print("="*80 + "\n")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
