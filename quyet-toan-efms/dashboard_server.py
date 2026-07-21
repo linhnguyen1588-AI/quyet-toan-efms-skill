@@ -182,9 +182,12 @@ def run_script():
         cmd.append(os.path.join(SCRIPTS_DIR, "download_invoices_api.py"))
 
     elif script_name == "download_eport_api":
+        excel_file = params.get("excel_file", "")
         if shutil.which("uv"):
-            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl"])
+            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl", "--with", "playwright"])
         cmd.append(os.path.join(SCRIPTS_DIR, "download_eport_api.py"))
+        if excel_file:
+            cmd.append(excel_file)
 
     elif script_name == "check_customs_clearance":
         if shutil.which("uv"):

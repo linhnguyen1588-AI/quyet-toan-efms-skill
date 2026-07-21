@@ -12,24 +12,42 @@ sys.stdout.reconfigure(encoding='utf-8')
 import json
 
 async def main():
-    if len(sys.argv) > 1:
-        excel_path = sys.argv[1]
+    if len(sys.argv) > 1 and sys.argv[1].strip():
+        excel_path = sys.argv[1].strip()
     else:
-        excel_path = r"D:\workspace-ai\HOA DON\HAOHUA\HAOHUA XUAT EPORT.xlsx"
+        default_catlai = r"D:\workspace-ai\HOA DON EPORT CAT LAI\HOA DON EPORT CAT LAI 01.07.xlsx"
+        default_haohua = r"D:\workspace-ai\HOA DON\HAOHUA\HAOHUA XUAT EPORT.xlsx"
+        if os.path.exists(default_catlai):
+            excel_path = default_catlai
+        elif os.path.exists(default_haohua):
+            excel_path = default_haohua
+        else:
+            excel_path = default_catlai
         
-    out_dir = os.path.dirname(excel_path)
-    
+    out_dir = os.path.join(os.path.dirname(excel_path), "HOA DON")
     if not os.path.exists(out_dir):
-        os.makedirs(out_dir)
+        os.makedirs(out_dir, exist_ok=True)
         
-    print("Đang đọc file Excel...")
+    print(f"Đang đọc file Excel từ: {excel_path}")
     try:
         df = pd.read_excel(excel_path)
-        bookings = df['BOOKING'].dropna().astype(str).unique().tolist()
-        bookings = [b for b in bookings if b.strip() and b.strip() != 'nan']
-        target_books = bookings # Lấy toàn bộ không giới hạn
+        booking_col = None
+        for col in df.columns:
+            col_str = str(col).strip().upper()
+            if 'BOOK' in col_str or 'BILL' in col_str or 'CONT' in col_str:
+                booking_col = col
+                break
+        if booking_col:
+            print(f"-> Đã phát hiện cột chứa mã: '{booking_col}'")
+            bookings = df[booking_col].dropna().astype(str).unique().tolist()
+        else:
+            print("-> Dùng cột đầu tiên trong file Excel...")
+            bookings = df.iloc[:, 0].dropna().astype(str).unique().tolist()
+            
+        bookings = [b.strip() for b in bookings if str(b).strip() and str(b).strip().lower() != 'nan']
+        target_books = bookings
     except Exception as e:
-        print("Lỗi đọc file:", e)
+        print("Lỗi đọc file Excel:", e)
         return
 
     if not target_books:
