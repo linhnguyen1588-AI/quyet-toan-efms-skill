@@ -58,25 +58,36 @@ async def main():
     failed_books = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        # Headless background mode: runs silently without opening visible browser window
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(accept_downloads=True)
         page = await context.new_page()
         
         print("\n==================================================")
-        print("SIÊU ROBOT API ĐÃ KÍCH HOẠT!")
-        print("Sếp chỉ cần ĐĂNG NHẬP và vượt CAPTCHA (nếu có).")
-        print("Khi vào đến màn hình chính của ePort, sếp ấn ENTER vào cửa sổ này (hoặc tạo file start.txt).")
+        print("SIÊU ROBOT API CHẠY NGẦM ĐÃ KÍCH HOẠT (HEADLESS MODE)!")
+        print("Tự động đăng nhập ePort Tân Cảng Cát Lái & tải hóa đơn PDF...")
         print("==================================================\n")
         
-        await page.goto("https://eport.saigonnewport.com.vn/FullContainerDelivery")
+        await page.goto("https://eport.saigonnewport.com.vn/")
         
-        # Đợi người dùng đăng nhập
-        if os.path.exists('start.txt'): os.remove('start.txt')
-        print("Đang chờ sếp đăng nhập xong... (Chat 'chạy' hoặc tạo file start.txt để bắt đầu)")
-        while not os.path.exists('start.txt'):
-            await asyncio.sleep(1)
-            
-        print("\n[+] Đã nhận lệnh! Bắt đầu càn quét qua API ẩn...")
+        # Tự động đăng nhập ngầm tài khoản ePort
+        try:
+            await page.wait_for_timeout(2000)
+            tax_loc = page.locator("input[type='text']:visible").first
+            await tax_loc.fill("0314436809")
+            pass_loc = page.locator("input[type='password']:visible").first
+            await pass_loc.fill("Sotrans1234@")
+            login_btn = page.locator("button:visible, input[type='submit']:visible").filter(has_text="Đăng nhập").first
+            await login_btn.click()
+            print("[INFO] Đã gửi thông tin đăng nhập tự động vào ePort Tân Cảng...")
+            await page.wait_for_timeout(3000)
+        except Exception as e:
+            print(f"[WARNING] Đăng nhập tự động: {e}")
+
+        await page.goto("https://eport.saigonnewport.com.vn/FullContainerDelivery")
+        await page.wait_for_timeout(2000)
+
+        print("\n[+] Đã hoàn tất đăng nhập ngầm! Bắt đầu càn quét qua API...")
         api_context = context.request
         
         # 1. Gọi API Search để lấy toàn bộ BatchNo trong 90 ngày (chia làm 3 chặng 30 ngày)
