@@ -387,18 +387,29 @@ def main():
         base_output_dir
     ]
     
+    def is_dir_writable(dpath):
+        try:
+            os.makedirs(dpath, exist_ok=True)
+            tfile = os.path.join(dpath, f".write_test_{os.getpid()}")
+            with open(tfile, "w") as f:
+                f.write("test")
+            os.remove(tfile)
+            return True
+        except Exception:
+            return False
+
     output_dir = None
     for p in possible_dirs:
-        try:
-            os.makedirs(p, exist_ok=True)
+        if is_dir_writable(p):
             output_dir = p
             break
-        except Exception:
-            continue
             
     if not output_dir:
-        output_dir = os.path.join(os.path.expanduser("~"), "QUYET_TOAN_OUTPUT")
+        fallback_base = os.path.join(os.path.expanduser("~"), "workspace-ai", "QUYET TOAN 2026")
+        output_dir = os.path.join(fallback_base, month_folder_name, buying_folder_name)
         os.makedirs(output_dir, exist_ok=True)
+        print(f"[WARNING] Ổ D: bị khóa quyền ghi. Đã lưu dự phòng vào: {output_dir}")
+        print(f"[TIP] Hãy chạy file 'Fix_Quyen_Ghi_O_D.bat' ngoài Desktop với quyền Administrator để mở khóa ổ D:")
         
     print(f"[INFO] Thư mục lưu file Excel đầu ra: {output_dir}")
 
