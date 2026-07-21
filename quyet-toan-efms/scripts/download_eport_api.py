@@ -11,24 +11,56 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 import json
 
+def resolve_excel_path(user_input):
+    user_input = user_input.strip()
+    if not user_input:
+        user_input = "HOA DON EPORT CAT LAI 01.07.xlsx"
+
+    # Candidate paths to check directly
+    search_dirs = [
+        r"D:\workspace-ai\HOA DON EPORT CAT LAI",
+        r"D:\workspace-ai",
+        r"C:\Users\sonha\workspace-ai\HOA DON EPORT CAT LAI",
+        r"C:\Users\sonha\workspace-ai"
+    ]
+
+    candidates = [
+        user_input,
+        user_input + ".xlsx",
+        user_input + ".xls"
+    ]
+
+    for d in search_dirs:
+        for c in candidates:
+            p = os.path.join(d, c)
+            if os.path.exists(p):
+                return os.path.abspath(p)
+
+    # Direct path check
+    for c in candidates:
+        if os.path.exists(c):
+            return os.path.abspath(c)
+
+    # Fuzzy search inside D:\workspace-ai
+    search_base = r"D:\workspace-ai"
+    if os.path.exists(search_base):
+        for root, _, files in os.walk(search_base):
+            for f in files:
+                if f.lower().endswith(('.xlsx', '.xls')):
+                    if user_input.lower() in f.lower() or user_input.lower() in os.path.splitext(f)[0].lower():
+                        return os.path.abspath(os.path.join(root, f))
+
+    return user_input
+
 async def main():
-    if len(sys.argv) > 1 and sys.argv[1].strip():
-        excel_path = sys.argv[1].strip()
-    else:
-        default_catlai = r"D:\workspace-ai\HOA DON EPORT CAT LAI\HOA DON EPORT CAT LAI 01.07.xlsx"
-        default_haohua = r"D:\workspace-ai\HOA DON\HAOHUA\HAOHUA XUAT EPORT.xlsx"
-        if os.path.exists(default_catlai):
-            excel_path = default_catlai
-        elif os.path.exists(default_haohua):
-            excel_path = default_haohua
-        else:
-            excel_path = default_catlai
+    raw_input = sys.argv[1].strip() if len(sys.argv) > 1 and sys.argv[1].strip() else "HOA DON EPORT CAT LAI 01.07.xlsx"
+    excel_path = resolve_excel_path(raw_input)
         
     out_dir = os.path.join(os.path.dirname(excel_path), "HOA DON")
     if not os.path.exists(out_dir):
         os.makedirs(out_dir, exist_ok=True)
         
-    print(f"Đang đọc file Excel từ: {excel_path}")
+    print(f"[SMART SCAN] Đã tìm thấy đường dẫn file Excel: {excel_path}")
     try:
         df = pd.read_excel(excel_path)
         booking_col = None
