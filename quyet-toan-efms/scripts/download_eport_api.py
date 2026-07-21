@@ -9,14 +9,11 @@ from playwright.async_api import async_playwright
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-import json
-
 def resolve_excel_path(user_input):
     user_input = user_input.strip()
     if not user_input:
         user_input = "HOA DON EPORT CAT LAI 01.07.xlsx"
 
-    # Candidate paths to check directly
     search_dirs = [
         r"D:\workspace-ai\HOA DON EPORT CAT LAI",
         r"D:\workspace-ai",
@@ -36,12 +33,10 @@ def resolve_excel_path(user_input):
             if os.path.exists(p):
                 return os.path.abspath(p)
 
-    # Direct path check
     for c in candidates:
         if os.path.exists(c):
             return os.path.abspath(c)
 
-    # Fuzzy search inside D:\workspace-ai
     search_base = r"D:\workspace-ai"
     if os.path.exists(search_base):
         for root, _, files in os.walk(search_base):
@@ -52,6 +47,11 @@ def resolve_excel_path(user_input):
 
     return user_input
 
+async def wait_if_captcha(page):
+    while await page.locator("text=Vui lòng nhập mã này").count() > 0 or await page.locator("text=What code is in the image").count() > 0:
+        print("\n[!] PHÁT HIỆN CAPTCHA! Đang đứng chờ giải captcha...")
+        await page.wait_for_timeout(4000)
+
 async def main():
     raw_input = sys.argv[1].strip() if len(sys.argv) > 1 and sys.argv[1].strip() else "HOA DON EPORT CAT LAI 01.07.xlsx"
     excel_path = resolve_excel_path(raw_input)
@@ -61,6 +61,8 @@ async def main():
         os.makedirs(out_dir, exist_ok=True)
         
     print(f"[SMART SCAN] Đã tìm thấy đường dẫn file Excel: {excel_path}")
+    print(f"[SMART SCAN] Thư mục lưu file Hóa Đơn PDF: {out_dir}")
+
     try:
         df = pd.read_excel(excel_path)
         booking_col = None
@@ -83,160 +85,142 @@ async def main():
         return
 
     if not target_books:
-        print("Không tìm thấy số Book nào trong file!")
+        print("Không tìm thấy số Book/Bill nào trong file!")
         return
 
-    print(f"Sẽ tiến hành quét {len(target_books)} Book: {target_books}")
+    print(f"Sẽ tiến hành quét tổng cộng {len(target_books)} mã...")
     failed_books = []
+    success_count = 0
 
     async with async_playwright() as p:
-        # Headless background mode: runs silently without opening visible browser window
+        # Headless background mode
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(accept_downloads=True)
         page = await context.new_page()
         
         print("\n==================================================")
-        print("SIÊU ROBOT API CHẠY NGẦM ĐÃ KÍCH HOẠT (HEADLESS MODE)!")
-        print("Tự động đăng nhập ePort Tân Cảng Cát Lái & tải hóa đơn PDF...")
+        print("SIÊU ROBOT TẢI HÓA ĐƠN ePORT CÁT LÁI CHẠY NGẦM 100%")
+        print("Tự động đăng nhập ngầm & quét tải hóa đơn PDF...")
         print("==================================================\n")
         
-        await page.goto("https://eport.saigonnewport.com.vn/")
+        await page.goto("https://eport.saigonnewport.com.vn/Home/Login")
         
-        # Tự động đăng nhập ngầm tài khoản ePort
+        # Tự động đăng nhập
         try:
             await page.wait_for_timeout(2000)
-            tax_loc = page.locator("input[type='text']:visible").first
-            await tax_loc.fill("0314436809")
-            pass_loc = page.locator("input[type='password']:visible").first
-            await pass_loc.fill("Sotrans1234@")
-            login_btn = page.locator("button:visible, input[type='submit']:visible").filter(has_text="Đăng nhập").first
+            await page.fill("input[name='Username'], input[id='Username']", "0314436809")
+            await page.fill("input[name='Password'], input[id='Password']", "Sotrans1234@")
+            
+            login_btn = page.locator("input[type='submit'], button[type='submit'], .btn-login, button:visible").first
             await login_btn.click()
-            print("[INFO] Đã gửi thông tin đăng nhập tự động vào ePort Tân Cảng...")
-            await page.wait_for_timeout(3000)
+            print("[INFO] Đã gửi thông tin đăng nhập tài khoản 0314436809 vào ePort Tân Cảng...")
+            await page.wait_for_timeout(4000)
+            await wait_if_captcha(page)
         except Exception as e:
             print(f"[WARNING] Đăng nhập tự động: {e}")
-
-        await page.goto("https://eport.saigonnewport.com.vn/FullContainerDelivery")
-        await page.wait_for_timeout(2000)
-
-        print("\n[+] Đã hoàn tất đăng nhập ngầm! Bắt đầu càn quét qua API...")
-        api_context = context.request
         
-        # 1. Gọi API Search để lấy toàn bộ BatchNo trong 90 ngày (chia làm 3 chặng 30 ngày)
-        print("  -> Đang nạp danh sách Booking từ máy chủ ePort...")
-        order_map = {}
-        for m in range(3):
-            date_to_dt = datetime.now() - timedelta(days=m*30)
-            date_from_dt = date_to_dt - timedelta(days=29) # 29 days to be strictly < 30
-            date_to = date_to_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            date_from = date_from_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            
-            for oper_type in ["", "FRECV", "HBCX", "FDELE", "FDISP", "EDO"]:
-                search_payload = {
-                    "DateFrom": date_from,
-                    "DateTo": date_to,
-                    "OperType": oper_type,
-                    "HasEDO": "False"
-                }
-                search_resp = await api_context.post(
-                    "https://eport.saigonnewport.com.vn/BatchNoList/SeachBatchNoList", 
-                    data=json.dumps(search_payload),
-                    headers={
-                        "Content-Type": "application/json; charset=UTF-8",
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Referer": "https://eport.saigonnewport.com.vn/FullContainerDelivery"
-                    }
-                )
-                try:
-                    search_data = await search_resp.json()
-                except Exception as e:
-                    print(f"  [!] Lỗi JSON: {e}, Status: {search_resp.status}")
-                    print(f"  [!] Response body: {(await search_resp.text())[:500]}")
-                    continue
-                    
-                data_arr = search_data.get("Data")
-                if not data_arr:
-                    print(f"  [!] API trả về không có Data: {str(search_data)[:200]}")
-                    continue
-                    
-                for item in data_arr:
-                    notes = str(item.get("NOTES", "")).strip()
-                    order_id = item.get("ORDER_ID")
-                    if notes and order_id:
-                        for book in target_books:
-                            if book in notes:
-                                order_map[book] = order_id
+        one_month_ago = (datetime.now() - timedelta(days=60)).strftime("%d/%m/%Y")
         
-        print(f"  [v] Đã tra cứu thành công {len(order_map)}/{len(target_books)} Book có trên hệ thống!")
-        
-        # 2. Xử lý từng book
-        for book in target_books:
-            print(f"\n>>> Đang xử lý ngầm Book: {book}")
-            if book not in order_map:
-                print(f"  [!] Book {book} không tồn tại hoặc đã quá hạn trên ePort.")
-                failed_books.append(book)
-                continue
-                
-            order_id = order_map[book]
+        for idx, book in enumerate(target_books, 1):
+            print(f"\n[{idx}/{len(target_books)}] >>> Đang xử lý Book/Bill: {book}")
             try:
-                # Gọi API Init hóa đơn
-                init_resp = await api_context.post(
-                    "https://eport.saigonnewport.com.vn/InvoiceEcom/Init", 
-                    data=json.dumps({"orderId": order_id}),
-                    headers={"Content-Type": "application/json; charset=UTF-8"}
-                )
-                init_data = await init_resp.json()
+                await page.goto("https://eport.saigonnewport.com.vn/FullContainerDelivery")
+                await wait_if_captcha(page)
+                await page.wait_for_selector("input, textarea", timeout=10000)
                 
-                invoices = init_data.get("Data", {}).get("Item2", [])
-                if not invoices:
-                    print(f"  [!] Book {book} chưa có hóa đơn nào được xuất.")
-                    failed_books.append(book)
-                    continue
-                    
-                print(f"  -> Tìm thấy {len(invoices)} hóa đơn. Đang tải...")
-                for idx, inv in enumerate(invoices):
-                    fkey = inv.get("INVOICE_FKEY")
-                    if not fkey: continue
-                    
-                    # Gọi API Download POST để lấy token
-                    await api_context.post(
-                        "https://eport.saigonnewport.com.vn/Payment/DownLoadInvoice_POST", 
-                        data=json.dumps({"fKey": fkey}),
-                        headers={"Content-Type": "application/json; charset=UTF-8"}
-                    )
-                    
-                    # Gọi API Download GET để lấy file PDF
-                    pdf_resp = await api_context.get("https://eport.saigonnewport.com.vn/Payment/DownLoadInvoice_PDF_GET")
-                    
-                    if pdf_resp.status == 200:
-                        suffix = f"_{idx + 1}"
-                        file_path = os.path.join(out_dir, f"{book}{suffix}.pdf")
-                            
-                        with open(file_path, "wb") as f:
-                            f.write(await pdf_resp.body())
-                        print(f"  [v] TẢI XONG: {file_path}")
-                    else:
-                        print(f"  [!] Lỗi khi tải PDF cho Book {book}, HTTP {pdf_resp.status}")
+                inputs = await page.locator("input, textarea").all()
+                for inp in inputs:
+                    ph = await inp.get_attribute("placeholder") or ""
+                    name = await inp.get_attribute("name") or ""
+                    if "từ ngày" in ph.lower() or "fromdate" in name.lower():
+                        await inp.fill("")
+                        await inp.fill(one_month_ago)
                         
+                found_note = False
+                for inp in inputs:
+                    ph = await inp.get_attribute("placeholder") or ""
+                    name = await inp.get_attribute("name") or ""
+                    if "ghi ch" in ph.lower() or "note" in name.lower() or "remark" in name.lower():
+                        await inp.fill(book)
+                        found_note = True
+                        break
+                        
+                if not found_note:
+                    await page.evaluate(f'''() => {{
+                        let inputs = document.querySelectorAll('input, textarea');
+                        for (let el of inputs) {{
+                            let html = el.outerHTML.toLowerCase();
+                            if (html.includes('ghichu') || html.includes('note') || html.includes('remark')) {{
+                                el.value = '{book}';
+                                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                break;
+                            }}
+                        }}
+                    }}''')
+                    
+                btns = await page.locator("button, a").all()
+                for btn in btns:
+                    text = await btn.text_content() or ""
+                    if "tìm kiếm" in text.lower() or "lấy dữ liệu" in text.lower():
+                        await btn.click()
+                        break
+                        
+                await page.wait_for_timeout(3000)
+                
+                grid = page.locator(".dx-datagrid, table").first
+                inv_locators = [
+                    "a[title*='Hóa đơn']", 
+                    "a[title*='hóa đơn']", 
+                    "i.fa-file-invoice", 
+                    "i.fa-download"
+                ]
+                
+                downloaded = False
+                for loc in inv_locators:
+                    elements = await grid.locator(loc).all()
+                    if elements:
+                        print(f"  -> Đã tìm thấy {len(elements)} hóa đơn. Đang tải về thư mục...")
+                        for el in elements:
+                            try:
+                                async with page.expect_download(timeout=10000) as download_info:
+                                    await el.click(force=True)
+                                    download = await download_info.value
+                                    
+                                    file_path = os.path.join(out_dir, f"{book}.pdf")
+                                    counter = 1
+                                    while os.path.exists(file_path):
+                                        file_path = os.path.join(out_dir, f"{book}_{counter}.pdf")
+                                        counter += 1
+                                        
+                                    await download.save_as(file_path)
+                                    print(f"  [SUCCESS] ĐÃ TẢI LƯU THÀNH CÔNG FILE PDF: {file_path}")
+                                    downloaded = True
+                                    success_count += 1
+                            except Exception as e:
+                                pass
+                        
+                        if downloaded:
+                            break 
+                        
+                if not downloaded:
+                    print(f"  [!] Book {book} không có dữ liệu hóa đơn hoặc đã quá hạn trên ePort.")
+                    failed_books.append(book)
             except Exception as e:
-                print(f"  [!] Lỗi khi gọi API cho Book {book}: {e}")
+                print(f"  [!] Lỗi khi xử lý Book {book}: {e}")
                 failed_books.append(book)
                 
-        print("\n🎉 HOÀN THÀNH TẢI QUA API SIÊU TỐC!")
-        await asyncio.sleep(2)
+        print(f"\n🎉 HOÀN THÀNH ROBOT TẢI HÓA ĐƠN NGẦM! TẢI THÀNH CÔNG {success_count} FILE PDF.")
         await browser.close()
         
-    # Xử lý tô màu vàng cho các book lỗi
     if failed_books:
-        print(f"\n[+] Đang tô vàng {len(failed_books)} Book lỗi...")
+        print(f"\n[+] Đang tô vàng {len(failed_books)} Book không có hóa đơn vào file Excel...")
         try:
             wb = openpyxl.load_workbook(excel_path)
             ws = wb.active
-            
             booking_col_idx = None
             for row in ws.iter_rows(min_row=1, max_row=5):
                 for cell in row:
-                    if cell.value and "BOOKING" in str(cell.value).upper():
+                    if cell.value and ("BOOKING" in str(cell.value).upper() or "BILL" in str(cell.value).upper()):
                         booking_col_idx = cell.column
                         break
                 if booking_col_idx: break
@@ -248,11 +232,12 @@ async def main():
                     if cell_val in failed_books:
                         for cell in row:
                             cell.fill = yellow_fill
+                
                 try:
                     wb.save(excel_path)
-                    print(f"  [v] Đã tô vàng xong file Excel!")
+                    print("  [v] Đã tô vàng xong file Excel!")
                 except PermissionError:
-                    print(f"  [!] LỖI: Vui lòng tắt file Excel rồi chạy lại để tô màu.")
+                    print("  [!] Vui lòng đóng file Excel để hệ thống lưu tô màu.")
         except Exception as e:
             pass
 
