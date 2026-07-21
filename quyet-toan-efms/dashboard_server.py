@@ -236,9 +236,12 @@ def run_script():
     try:
         lf = open(log_file_path, "a", encoding="utf-8", errors="replace")
         
-        # On Windows, we run via shell
+        # Format command list into a valid Windows command string
+        cmd_str = subprocess.list2cmdline(cmd) if isinstance(cmd, list) else cmd
+        print(f"[INFO] Formatted command line: {cmd_str}")
+        
         process = subprocess.Popen(
-            cmd,
+            cmd_str,
             stdout=lf,
             stderr=lf,
             cwd=SKILL_DIR,
