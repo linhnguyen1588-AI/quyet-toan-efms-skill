@@ -329,23 +329,36 @@ def list_files():
     config = load_json(CONFIG_FILE)
     output_dir = config.get("output_dir", "")
     
-    if not output_dir or not os.path.exists(output_dir):
+    search_dirs = [output_dir, os.path.join(os.path.expanduser("~"), "workspace-ai", "QUYET TOAN 2026"), os.path.join(os.path.expanduser("~"), "QUYET_TOAN_2026")]
+    valid_dir = None
+    for d in search_dirs:
+        if d and os.path.exists(d):
+            valid_dir = d
+            break
+            
+    if not valid_dir:
         return jsonify({"files": [], "error": f"Thư mục '{output_dir}' không tồn tại!"})
         
     files_list = []
     try:
-        for entry in os.scandir(output_dir):
-            if entry.is_file() and entry.name.endswith((".xls", ".xlsx")):
-                stats = entry.stat()
-                size_kb = round(stats.st_size / 1024, 1)
-                mod_time = datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-                
-                files_list.append({
-                    "name": entry.name,
-                    "size_kb": size_kb,
-                    "mtime": mod_time,
-                    "path": entry.path
-                })
+        for root, _, files in os.walk(valid_dir):
+            for file in files:
+                if file.endswith((".xls", ".xlsx")) and not file.startswith("~$"):
+                    full_path = os.path.join(root, file)
+                    stats = os.stat(full_path)
+                    size_kb = round(stats.st_size / 1024, 1)
+                    mod_time = datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    rel_dir = os.path.relpath(root, valid_dir)
+                    display_name = file if rel_dir == "." else f"[{rel_dir}] {file}"
+                    
+                    files_list.append({
+                        "name": display_name,
+                        "filename": file,
+                        "size_kb": size_kb,
+                        "mtime": mod_time,
+                        "path": full_path
+                    })
         
         files_list.sort(key=lambda x: x["mtime"], reverse=True)
         return jsonify({"files": files_list})
@@ -356,18 +369,34 @@ def list_files():
 def open_file():
     data = request.json
     filename = data.get("filename")
+    full_path = data.get("path")
     open_folder = data.get("open_folder", False)
     
     config = load_json(CONFIG_FILE)
     output_dir = config.get("output_dir", "")
     
-    if not output_dir or not os.path.exists(output_dir):
-        return jsonify({"success": False, "message": "Thư mục đầu ra không tồn tại hoặc chưa được cấu hình!"}), 400
-        
     try:
         if open_folder:
-            print(f"[INFO] Opening directory: {output_dir}")
-            os.startfile(output_dir)
+            target = output_dir if (output_dir and os.path.exists(output_dir)) else os.path.join(os.path.expanduser("~"), "workspace-ai", "QUYET TOAN 2026")
+            if target and os.path.exists(target):
+                os.startfile(target)
+                return jsonify({"success": True, "message": f"Đã mở thư mục: {target}"})
+            else:
+                return jsonify({"success": False, "message": "Thư mục không tồn tại!"}), 400
+        elif full_path and os.path.exists(full_path):
+            os.startfile(full_path)
+            return jsonify({"success": True, "message": f"Đã mở file {filename}."})
+        elif filename and output_dir:
+            target_path = os.path.join(output_dir, filename)
+            if os.path.exists(target_path):
+                os.startfile(target_path)
+                return jsonify({"success": True, "message": f"Đã mở file {filename}."})
+            else:
+                return jsonify({"success": False, "message": f"File {filename} không tồn tại!"}), 404
+        else:
+            return jsonify({"success": False, "message": "Yêu cầu không hợp lệ!"}), 400
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Không thể mở file/thư mục: {str(e)}"}), 500
             return jsonify({"success": True, "message": "Đã mở thư mục kết quả."})
         elif filename:
             full_path = os.path.join(output_dir, filename)
