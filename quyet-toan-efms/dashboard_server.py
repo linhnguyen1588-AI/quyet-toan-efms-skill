@@ -124,8 +124,14 @@ def run_script():
     task_id = str(uuid.uuid4())[:8]
     log_file_path = os.path.join(LOGS_DIR, f"{task_id}.log")
     
-    # Construct commands based on script name
-    cmd = ["uv", "run"]
+    # Construct commands based on script name, with python fallback if uv is missing
+    python_bin = sys.executable
+    if shutil.which("uv"):
+        runner_cmd = ["uv", "run"]
+    else:
+        runner_cmd = [python_bin]
+        
+    cmd = list(runner_cmd)
     
     if script_name == "build_efms":
         company = params.get("company", "")
@@ -139,11 +145,14 @@ def run_script():
         cont_col = params.get("cont_col")
         tk_col = params.get("tk_col")
         
+        if shutil.which("uv"):
+            cmd.extend([
+                "--with", "pandas",
+                "--with", "openpyxl",
+                "--with", "requests",
+                "--with", "python-calamine",
+            ])
         cmd.extend([
-            "--with", "pandas",
-            "--with", "openpyxl",
-            "--with", "requests",
-            "--with", "python-calamine",
             os.path.join(SCRIPTS_DIR, "build_efms.py"),
             "--company", str(company),
             "--month", str(month),
@@ -163,25 +172,50 @@ def run_script():
             cmd.extend(["--tk-col", str(tk_col)])
             
     elif script_name == "download_thuphihatang":
-        cmd.extend([
-            "--with", "playwright",
-            "--with", "pandas",
-            "--with", "openpyxl",
-            os.path.join(SCRIPTS_DIR, "download_thuphihatang.py")
-        ])
+        if shutil.which("uv"):
+            cmd.extend(["--with", "playwright", "--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "download_thuphihatang.py"))
+
     elif script_name == "download_invoices_api":
-        cmd.extend([
-            "--with", "playwright",
-            "--with", "pandas",
-            "--with", "openpyxl",
-            "--with", "requests",
-            os.path.join(SCRIPTS_DIR, "download_invoices_api.py")
-        ])
+        if shutil.which("uv"):
+            cmd.extend(["--with", "playwright", "--with", "pandas", "--with", "openpyxl", "--with", "requests"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "download_invoices_api.py"))
+
+    elif script_name == "download_eport_api":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "download_eport_api.py"))
+
+    elif script_name == "check_customs_clearance":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "check_customs_clearance.py"))
+
+    elif script_name == "check_buying_fees":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "check_buying_fees.py"))
+
+    elif script_name == "check_cutoff_alert":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "check_cutoff_alert.py"))
+
+    elif script_name == "upload_efms":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "requests", "--with", "pandas", "--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "upload_efms.py"))
+
+    elif script_name == "format_excel":
+        if shutil.which("uv"):
+            cmd.extend(["--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "format_excel.py"))
+
     elif script_name == "process_buying":
-        cmd.extend([
-            "--with", "openpyxl",
-            os.path.join(SCRIPTS_DIR, "process_buying.py")
-        ])
+        if shutil.which("uv"):
+            cmd.extend(["--with", "openpyxl"])
+        cmd.append(os.path.join(SCRIPTS_DIR, "process_buying.py"))
+
     else:
         return jsonify({"success": False, "message": f"Kịch bản '{script_name}' không hợp lệ!"}), 400
         
