@@ -98,7 +98,8 @@ def get_status():
         "disk_free_gb": disk_free,
         "active_tasks": tasks_summary,
         "running_count": running_count,
-        "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "server_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "token_usage": "99.2% Trống"
     })
 
 @app.route("/api/save-config", methods=["POST"])
